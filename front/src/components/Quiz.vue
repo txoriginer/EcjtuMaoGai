@@ -37,6 +37,37 @@
         <div class="chapter-info" v-if="chapterQuestions.length > 0">
           当前章节共 {{ chapterQuestions.length }} 题，已完成 {{ completedChapterQuestions }} 题
         </div>
+        
+        <!-- 题目导航栏（可展开/收缩） -->
+        <div v-if="chapterQuestions.length > 0" class="question-navigator-container">
+          <button 
+            class="navigator-toggle-btn"
+            @click="isNavigatorExpanded = !isNavigatorExpanded"
+          >
+            <span>题目导航</span>
+            <span class="toggle-icon" :class="{ expanded: isNavigatorExpanded }">▼</span>
+          </button>
+          
+          <transition name="navigator">
+            <div v-if="isNavigatorExpanded" class="question-navigator-content">
+              <div class="question-numbers">
+                <button
+                  v-for="(question, index) in chapterQuestions"
+                  :key="index"
+                  class="question-number-btn"
+                  :class="{
+                    'current': currentChapterQuestionIndex === index,
+                    'answered': answeredChapterQuestions.has(index),
+                    'unanswered': !answeredChapterQuestions.has(index)
+                  }"
+                  @click="goToQuestion(index)"
+                >
+                  {{ index + 1 }}
+                </button>
+              </div>
+            </div>
+          </transition>
+        </div>
       </div>
     </div>
 
@@ -137,6 +168,7 @@ const currentChapterQuestionIndex = ref(-1);
 const currentMode = ref('random'); // 'random' 或 'chapter'
 const completedChapterQuestions = ref(0);
 const answeredChapterQuestions = ref(new Set());
+const isNavigatorExpanded = ref(false); // 控制导航栏展开/收缩状态
 
 // 组件挂载时加载章节列表
 onMounted(async () => {
@@ -378,6 +410,30 @@ const startPractice = () => {
   }
 };
 
+// 跳转到指定题目
+const goToQuestion = (index) => {
+  if (index >= 0 && index < chapterQuestions.value.length) {
+    currentChapterQuestionIndex.value = index;
+    currentQuestion.value = chapterQuestions.value[index];
+    
+    // 重置选择和结果状态
+    selectedOptions.value = [];
+    showResult.value = false;
+    isCorrect.value = false;
+    
+    // 解析正确答案
+    try {
+      if (currentQuestion.value.correctAnswersList) {
+        correctAnswers.value = currentQuestion.value.correctAnswersList;
+      } else if (typeof currentQuestion.value.correctAnswers === 'string') {
+        correctAnswers.value = JSON.parse(currentQuestion.value.correctAnswers);
+      }
+    } catch (e) {
+      console.error('解析正确答案失败:', e);
+    }
+  }
+};
+
 // 处理下一题按钮点击
 const handleNextQuestion = () => {
   if (currentMode.value === 'chapter' && chapterQuestions.value.length > 0) {
@@ -513,6 +569,131 @@ onMounted(() => {
   font-size: 14px;
   color: #666;
   margin-top: 5px;
+}
+
+/* 可展开/收缩的题目导航栏样式 */
+.question-navigator-container {
+  margin-top: 20px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.navigator-toggle-btn {
+  width: 100%;
+  padding: 12px 20px;
+  background-color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  transition: background-color 0.3s ease;
+}
+
+.navigator-toggle-btn:hover {
+  background-color: #f8f9fa;
+}
+
+.toggle-icon {
+  font-size: 12px;
+  transition: transform 0.3s ease;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.question-navigator-content {
+  background-color: white;
+  padding: 15px;
+}
+
+.question-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.question-number-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #e0e0e0;
+  background-color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.question-number-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.question-number-btn.current {
+  background-color: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+
+.question-number-btn.answered {
+  background-color: #e8f5e9;
+  border-color: #4caf50;
+  color: #4caf50;
+}
+
+.question-number-btn.unanswered {
+  background-color: white;
+  border-color: #e0e0e0;
+  color: #666;
+}
+
+/* 导航栏展开/收缩动画 */
+.navigator-enter-active,
+.navigator-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.navigator-enter-from,
+.navigator-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.navigator-enter-to,
+.navigator-leave-from {
+  max-height: 500px;
+  opacity: 1;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .question-number-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 12px;
+  }
+  
+  .question-numbers {
+    gap: 6px;
+  }
+  
+  .navigator-toggle-btn {
+    padding: 10px 15px;
+    font-size: 14px;
+  }
 }
 
 .question-section {
