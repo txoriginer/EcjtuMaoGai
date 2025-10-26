@@ -57,8 +57,9 @@
                   class="question-number-btn"
                   :class="{
                     'current': currentChapterQuestionIndex === index,
-                    'answered': answeredChapterQuestions.has(index),
-                    'unanswered': !answeredChapterQuestions.has(index)
+                    'correct': questionResults.has(index) && questionResults.get(index),
+                    'incorrect': questionResults.has(index) && !questionResults.get(index),
+                    'unanswered': !questionResults.has(index)
                   }"
                   @click="goToQuestion(index)"
                 >
@@ -169,6 +170,7 @@ const currentMode = ref('random'); // 'random' 或 'chapter'
 const completedChapterQuestions = ref(0);
 const answeredChapterQuestions = ref(new Set());
 const isNavigatorExpanded = ref(false); // 控制导航栏展开/收缩状态
+const questionResults = ref(new Map()); // 存储每个题目的答题结果（正确/错误）
 
 // 组件挂载时加载章节列表
 onMounted(async () => {
@@ -230,6 +232,7 @@ const resetQuizState = () => {
   currentChapterQuestionIndex.value = -1;
   completedChapterQuestions.value = 0;
   answeredChapterQuestions.value.clear();
+  questionResults.value.clear(); // 清空答题结果
 };
 
 // 加载章节题目
@@ -363,10 +366,12 @@ const checkAnswer = async () => {
 
       showResult.value = true;
       
-      // 记录已回答的章节题目
+      // 记录已回答的章节题目和答题结果
       if (currentMode.value === 'chapter' && currentChapterQuestionIndex.value >= 0) {
         answeredChapterQuestions.value.add(currentChapterQuestionIndex.value);
         completedChapterQuestions.value = answeredChapterQuestions.value.size;
+        // 记录答题结果（正确/错误）
+        questionResults.value.set(currentChapterQuestionIndex.value, isCorrect.value);
       }
     }
   } catch (error) {
@@ -381,19 +386,21 @@ const localCheckAnswer = () => {
   if (!correctAnswers.value) return;
 
   // 检查选择的答案是否与正确答案完全匹配
-    if (selectedOptions.value.length === correctAnswers.value.length) {
-      const isAllCorrect = selectedOptions.value.every(option =>
-        correctAnswers.value.includes(option)
-      );
-      isCorrect.value = isAllCorrect;
-    }
+  if (selectedOptions.value.length === correctAnswers.value.length) {
+    const isAllCorrect = selectedOptions.value.every(option =>
+      correctAnswers.value.includes(option)
+    );
+    isCorrect.value = isAllCorrect;
+  }
 
   showResult.value = true;
   
-  // 记录已回答的章节题目
+  // 记录已回答的章节题目和答题结果
   if (currentMode.value === 'chapter' && currentChapterQuestionIndex.value >= 0) {
     answeredChapterQuestions.value.add(currentChapterQuestionIndex.value);
     completedChapterQuestions.value = answeredChapterQuestions.value.size;
+    // 记录答题结果（正确/错误）
+    questionResults.value.set(currentChapterQuestionIndex.value, isCorrect.value);
   }
 };
 
@@ -645,16 +652,29 @@ onMounted(() => {
   border-color: #1a73e8;
 }
 
-.question-number-btn.answered {
+.question-number-btn.correct {
   background-color: #e8f5e9;
   border-color: #4caf50;
   color: #4caf50;
+}
+
+.question-number-btn.incorrect {
+  background-color: #ffebee;
+  border-color: #f44336;
+  color: #f44336;
 }
 
 .question-number-btn.unanswered {
   background-color: white;
   border-color: #e0e0e0;
   color: #666;
+}
+
+/* 当题目是当前题目且已回答时，保留当前题目的样式优先级 */
+.question-number-btn.current {
+  background-color: #1a73e8 !important;
+  color: white !important;
+  border-color: #1a73e8 !important;
 }
 
 /* 导航栏展开/收缩动画 */
