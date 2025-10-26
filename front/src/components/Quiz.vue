@@ -1,6 +1,44 @@
 <template>
   <div class="quiz-container" >
     <h1 class="quiz-title">毛概选择题练习</h1>
+    
+    <!-- 练习模式选择 -->
+    <div class="mode-selector">
+      <div class="mode-tabs">
+        <button 
+          class="mode-tab" 
+          :class="{ active: currentMode === 'random' }"
+          @click="switchMode('random')"
+        >
+          随机练习
+        </button>
+        <button 
+          class="mode-tab" 
+          :class="{ active: currentMode === 'chapter' }"
+          @click="switchMode('chapter')"
+        >
+          章节练习
+        </button>
+      </div>
+      
+      <!-- 章节选择区域 -->
+      <div v-if="currentMode === 'chapter'" class="chapter-selector">
+        <label for="chapter-select">选择章节：</label>
+        <select 
+          id="chapter-select" 
+          v-model="selectedChapter"
+          @change="loadChapterQuestions"
+        >
+          <option value="" disabled>请选择章节</option>
+          <option v-for="chapter in chapters" :key="chapter" :value="chapter">
+            {{ chapter }}
+          </option>
+        </select>
+        <div class="chapter-info" v-if="chapterQuestions.length > 0">
+          当前章节共 {{ chapterQuestions.length }} 题，已完成 {{ completedChapterQuestions }} 题
+        </div>
+      </div>
+    </div>
 
     <!-- 题目信息区域 -->
     <div v-if="currentQuestion" class="question-section">
@@ -49,7 +87,7 @@
         <div class="action-buttons">
           <button
               class="btn-primary"
-              @click="getRandomQuestion"
+              @click="handleNextQuestion"
               :disabled="!showResult"
           >
             下一题
@@ -74,7 +112,7 @@
     <!-- 初始状态 -->
     <div v-else class="initial-section">
       <p>点击开始按钮获取随机题目</p>
-      <button class="btn-primary" @click="getRandomQuestion">开始练习</button>
+      <button class="btn-primary" @click="startPractice">开始练习</button>
     </div>
   </div>
 </template>
@@ -91,6 +129,26 @@ const isCorrect = ref(false);
 const correctAnswers = ref([]);
 const loading = ref(false);
 
+// 章节相关数据
+const chapters = ref([]);
+const selectedChapter = ref('');
+const chapterQuestions = ref([]);
+const currentChapterQuestionIndex = ref(-1);
+const currentMode = ref('random'); // 'random' 或 'chapter'
+const completedChapterQuestions = ref(0);
+const answeredChapterQuestions = ref(new Set());
+
+// 组件挂载时加载章节列表
+onMounted(async () => {
+  document.addEventListener('keypress', handleKeyPress);
+  await loadChapters();
+  
+  // 组件卸载时移除事件监听
+  return () => {
+    document.removeEventListener('keypress', handleKeyPress);
+  };
+});
+
 // 计算属性 - 将JSON字符串转换为选项列表
 const optionsList = computed(() => {
   if (!currentQuestion.value) return [];
@@ -105,6 +163,100 @@ const optionsList = computed(() => {
   }
   return [];
 });
+
+// 加载章节列表
+const loadChapters = async () => {
+  try {
+    const response = await axios.get('http://localhost:8080/api/questions/chapters');
+    if (response.data.code === 200) {
+      chapters.value = response.data.data;
+    }
+  } catch (error) {
+    console.error('加载章节列表失败:', error);
+  }
+};
+
+// 切换练习模式
+const switchMode = (mode) => {
+  if (currentMode.value !== mode) {
+    currentMode.value = mode;
+    resetQuizState();
+    
+    if (mode === 'chapter' && selectedChapter.value) {
+      loadChapterQuestions();
+    }
+  }
+};
+
+// 重置测验状态
+const resetQuizState = () => {
+  currentQuestion.value = null;
+  selectedOptions.value = [];
+  showResult.value = false;
+  isCorrect.value = false;
+  correctAnswers.value = [];
+  currentChapterQuestionIndex.value = -1;
+  completedChapterQuestions.value = 0;
+  answeredChapterQuestions.value.clear();
+};
+
+// 加载章节题目
+const loadChapterQuestions = async () => {
+  if (!selectedChapter.value) return;
+  
+  loading.value = true;
+  resetQuizState();
+  
+  try {
+    const response = await axios.get(`http://localhost:8080/api/questions/chapter/${encodeURIComponent(selectedChapter.value)}`);
+    if (response.data.code === 200) {
+      chapterQuestions.value = response.data.data;
+      if (chapterQuestions.value.length > 0) {
+        loadNextChapterQuestion();
+      } else {
+        alert('该章节暂无题目');
+      }
+    }
+  } catch (error) {
+    console.error('加载章节题目失败:', error);
+    alert('加载题目失败，请稍后重试');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 加载章节的下一题
+const loadNextChapterQuestion = () => {
+  if (chapterQuestions.value.length === 0) return;
+  
+  // 找到下一个未回答的题目，如果所有题目都已回答，则随机选择一个
+  let nextIndex = -1;
+  for (let i = 0; i < chapterQuestions.value.length; i++) {
+    if (!answeredChapterQuestions.value.has(i)) {
+      nextIndex = i;
+      break;
+    }
+  }
+  
+  // 如果所有题目都已回答，随机选择一个
+  if (nextIndex === -1) {
+    nextIndex = Math.floor(Math.random() * chapterQuestions.value.length);
+  }
+  
+  currentChapterQuestionIndex.value = nextIndex;
+  currentQuestion.value = chapterQuestions.value[nextIndex];
+  
+  // 解析正确答案
+  try {
+    if (currentQuestion.value.correctAnswersList) {
+      correctAnswers.value = currentQuestion.value.correctAnswersList;
+    } else if (typeof currentQuestion.value.correctAnswers === 'string') {
+      correctAnswers.value = JSON.parse(currentQuestion.value.correctAnswers);
+    }
+  } catch (e) {
+    console.error('解析正确答案失败:', e);
+  }
+};
 
 // 获取随机题目
 const getRandomQuestion = async () => {
@@ -178,6 +330,12 @@ const checkAnswer = async () => {
       }
 
       showResult.value = true;
+      
+      // 记录已回答的章节题目
+      if (currentMode.value === 'chapter' && currentChapterQuestionIndex.value >= 0) {
+        answeredChapterQuestions.value.add(currentChapterQuestionIndex.value);
+        completedChapterQuestions.value = answeredChapterQuestions.value.size;
+      }
     }
   } catch (error) {
     console.error('检查答案失败:', error);
@@ -191,14 +349,46 @@ const localCheckAnswer = () => {
   if (!correctAnswers.value) return;
 
   // 检查选择的答案是否与正确答案完全匹配
-  if (selectedOptions.value.length === correctAnswers.value.length) {
-    const isAllCorrect = selectedOptions.value.every(option =>
-      correctAnswers.value.includes(option)
-    );
-    isCorrect.value = isAllCorrect;
-  }
+    if (selectedOptions.value.length === correctAnswers.value.length) {
+      const isAllCorrect = selectedOptions.value.every(option =>
+        correctAnswers.value.includes(option)
+      );
+      isCorrect.value = isAllCorrect;
+    }
 
   showResult.value = true;
+  
+  // 记录已回答的章节题目
+  if (currentMode.value === 'chapter' && currentChapterQuestionIndex.value >= 0) {
+    answeredChapterQuestions.value.add(currentChapterQuestionIndex.value);
+    completedChapterQuestions.value = answeredChapterQuestions.value.size;
+  }
+};
+
+// 开始练习
+const startPractice = () => {
+  if (currentMode.value === 'chapter') {
+    if (!selectedChapter.value && chapters.value.length > 0) {
+      // 如果还没有选择章节，默认选择第一个章节
+      selectedChapter.value = chapters.value[0];
+    }
+    loadChapterQuestions();
+  } else {
+    getRandomQuestion();
+  }
+};
+
+// 处理下一题按钮点击
+const handleNextQuestion = () => {
+  if (currentMode.value === 'chapter' && chapterQuestions.value.length > 0) {
+    loadNextChapterQuestion();
+  } else {
+    getRandomQuestion();
+  }
+  // 重置选择和结果状态
+  selectedOptions.value = [];
+  showResult.value = false;
+  isCorrect.value = false;
 };
 
 // 多选题提交答案（按Enter键）
@@ -246,8 +436,83 @@ onMounted(() => {
 .quiz-title {
   text-align: center;
   color: #1a73e8;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   font-size: 28px;
+}
+
+/* 练习模式选择器样式 */
+.mode-selector {
+  margin-bottom: 25px;
+  padding: 20px;
+  background-color: #f0f7ff;
+  border-radius: 8px;
+}
+
+.mode-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #1a73e8;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 12px 20px;
+  background-color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  color: #666;
+}
+
+.mode-tab:first-child {
+  border-right: 1px solid #e0e0e0;
+}
+
+.mode-tab:hover {
+  background-color: #f8f9fa;
+}
+
+.mode-tab.active {
+  background-color: #1a73e8;
+  color: white;
+}
+
+/* 章节选择器样式 */
+.chapter-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chapter-selector label {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.chapter-selector select {
+  padding: 10px 15px;
+  font-size: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  background-color: white;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.chapter-selector select:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+.chapter-info {
+  font-size: 14px;
+  color: #666;
+  margin-top: 5px;
 }
 
 .question-section {
