@@ -264,12 +264,24 @@ const loadChapterQuestions = async () => {
 const loadNextChapterQuestion = () => {
   if (chapterQuestions.value.length === 0) return;
   
-  // 找到下一个未回答的题目，如果所有题目都已回答，则随机选择一个
+  // 找到下一个未回答的题目，从当前索引开始往后查找
   let nextIndex = -1;
-  for (let i = 0; i < chapterQuestions.value.length; i++) {
+  
+  // 先从当前索引的下一个位置开始查找
+  for (let i = currentChapterQuestionIndex.value + 1; i < chapterQuestions.value.length; i++) {
     if (!answeredChapterQuestions.value.has(i)) {
       nextIndex = i;
       break;
+    }
+  }
+  
+  // 如果从当前位置之后找不到未回答的题目，则从头开始查找
+  if (nextIndex === -1) {
+    for (let i = 0; i < chapterQuestions.value.length; i++) {
+      if (!answeredChapterQuestions.value.has(i)) {
+        nextIndex = i;
+        break;
+      }
     }
   }
   
@@ -280,6 +292,11 @@ const loadNextChapterQuestion = () => {
   
   currentChapterQuestionIndex.value = nextIndex;
   currentQuestion.value = chapterQuestions.value[nextIndex];
+  
+  // 重置选择状态
+  selectedOptions.value = [];
+  showResult.value = false;
+  isCorrect.value = false;
   
   // 解析正确答案
   try {
